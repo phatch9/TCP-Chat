@@ -26,3 +26,29 @@ Building a TCP chat server using Go, which enables clients to communicate with e
 ```
 /quit
 ```
+
+## Try the server:
+- Provide a module path when running
+```
+go mod init
+```
+- Cleans up go.mod (Optional):
+```
+go mod tidy
+```
+- Build the chat on localhost:
+```
+go build .
+```
+
+On a different terminal, run:
+```
+telnet localhost 8888
+```
+Chat server run successful output:
+```
+Trying ::1...
+Connected to localhost.
+Escape character is '^]'.
+```
+- Start with /nick yourname -
