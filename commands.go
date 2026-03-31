@@ -12,6 +12,7 @@ const (
 	CMD_DM
 	CMD_STATUS
 	CMD_HELP
+	CMD_HISTORY
 )
 
 type commands struct {
