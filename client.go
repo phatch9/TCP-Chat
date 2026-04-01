@@ -19,13 +19,25 @@ func (c *client) readInput() {
 	for {
 		msg, err := bufio.NewReader(c.conn).ReadString('\n')
 		if err != nil {
+			// Connection closed
+			c.commands <- commands{
+				id:     CMD_QUIT,
+				client: c,
+			}
 			return
 		}
 
 		msg = strings.Trim(msg, "\r\n")
+		if msg == "" {
+			continue // Skip empty lines
+		}
 
-		args := strings.Split(msg, " ")
-		cmd := strings.TrimSpace(args[0])
+		args := strings.Fields(msg) // Use Fields to properly split by whitespace
+		if len(args) == 0 {
+			continue
+		}
+
+		cmd := strings.ToLower(strings.TrimSpace(args[0]))
 
 		switch cmd {
 		case "/nick":
@@ -91,9 +103,9 @@ func (c *client) readInput() {
 }
 
 func (c *client) err(err error) {
-	c.conn.Write([]byte("err: " + err.Error() + "\n"))
+	c.conn.Write([]byte("❌ " + err.Error() + "\n"))
 }
 
 func (c *client) msg(msg string) {
-	c.conn.Write([]byte("> " + msg + "\n"))
+	c.conn.Write([]byte("  " + msg + "\n"))
 }
