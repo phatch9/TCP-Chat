@@ -68,17 +68,36 @@ func (s *server) newClient(conn net.Conn) *client {
 
 func (s *server) nick(c *client, args []string) {
 	if len(args) < 2 {
-		c.msg("nick is required. usage: /nick NAME")
+		c.msg("Username is required. Usage: /nick NAME")
 		return
 	}
 
-	c.nick = args[1]
-	c.msg(fmt.Sprintf("all right, I will call you %s", c.nick))
+	newNick := args[1]
+
+	// Validate nick length
+	if len(newNick) > 20 {
+		c.msg("Username must be 20 characters or less")
+		return
+	}
+
+	if len(newNick) < 2 {
+		c.msg("Username must be at least 2 characters")
+		return
+	}
+
+	oldNick := c.nick
+	c.nick = newNick
+	c.msg(fmt.Sprintf("COMPLETED. Username changed from '%s' to '%s'", oldNick, newNick))
+
+	// Notify room if user is in one
+	if c.room != nil {
+		c.room.broadcast(c, fmt.Sprintf("[SYSTEM] %s is now known as %s", oldNick, newNick))
+	}
 }
 
 func (s *server) join(c *client, args []string) {
 	if len(args) < 2 {
-		c.msg("room name is required. usage: /join ROOM_NAME")
+		c.msg("Room name is required. usage: /join ROOM_NAME")
 		return
 	}
 
