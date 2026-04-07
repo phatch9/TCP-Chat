@@ -14,6 +14,7 @@ type server struct {
 	clients  map[net.Addr]*client
 	commands chan commands
 	mu       sync.RWMutex
+	auth     *AuthManager
 }
 
 func newServer() *server {
@@ -21,12 +22,19 @@ func newServer() *server {
 		rooms:    make(map[string]*room),
 		clients:  make(map[net.Addr]*client),
 		commands: make(chan commands, 100),
+		auth:     NewAuthManager(),
 	}
 }
 
 func (s *server) run() {
 	for cmd := range s.commands {
 		switch cmd.id {
+		case CMD_REGISTER:
+			s.register(cmd.client, cmd.args)
+		case CMD_LOGIN:
+			s.login(cmd.client, cmd.args)
+		case CMD_LOGOUT:
+			s.logout(cmd.client)
 		case CMD_NICK:
 			s.nick(cmd.client, cmd.args)
 		case CMD_JOIN:
@@ -96,6 +104,10 @@ func (s *server) nick(c *client, args []string) {
 }
 
 func (s *server) join(c *client, args []string) {
+	if !s.isAuthenticated(c) {
+		return
+	}
+
 	if len(args) < 2 {
 		c.msg("Room name is required. usage: /join ROOM_NAME")
 		return
@@ -144,6 +156,10 @@ func (s *server) listRooms(c *client) {
 }
 
 func (s *server) msg(c *client, args []string) {
+	if !s.isAuthenticated(c) {
+		return
+	}
+
 	if c.room == nil {
 		c.msg("[ERROR] You must join a room first to send messages. Use /join ROOM_NAME")
 		return
@@ -189,6 +205,10 @@ func (s *server) quitCurrentRoom(c *client) {
 }
 
 func (s *server) listUsers(c *client) {
+	if !s.isAuthenticated(c) {
+		return
+	}
+
 	if c.room == nil {
 		c.msg("[ERROR] You are not in a room. Use /join ROOM_NAME to join a room first.")
 		return
@@ -213,6 +233,10 @@ func (s *server) listUsers(c *client) {
 }
 
 func (s *server) dm(c *client, args []string) {
+	if !s.isAuthenticated(c) {
+		return
+	}
+
 	if len(args) < 3 {
 		c.msg("[ERROR] Usage: /dm USERNAME MESSAGE")
 		return
@@ -247,6 +271,10 @@ func (s *server) dm(c *client, args []string) {
 }
 
 func (s *server) setStatus(c *client, args []string) {
+	if !s.isAuthenticated(c) {
+		return
+	}
+
 	if len(args) < 2 {
 		c.msg("[ERROR] Usage: /status STATUS (e.g., away, busy, offline)")
 		return
@@ -264,26 +292,62 @@ func (s *server) setStatus(c *client, args []string) {
 }
 
 func (s *server) help(c *client) {
+	if !c.authenticated {
+		helpText := `
+╔════════════════════════════════════════╗
+║    Welcome to TCP-Chat (v2.0 Auth)     ║
+╠════════════════════════════════════════╣
+║                                        ║
+║     AUTHENTICATION REQUIRED             ║
+║  /register <user> <pass> - Create acc ║
+║  /login <user> <pass>    - Sign in    ║
+║                                        ║
+║  Example:                              ║
+║    /register alice mypassword          ║
+║    /login alice mypassword             ║
+║                                        ║
+║  /help     - Show this message         ║
+║  /quit     - Exit the chat             ║
+╚════════════════════════════════════════╝
+`
+		c.msg(helpText)
+		return
+	}
+
+	// Authenticated user help
 	helpText := `
 ╔════════════════════════════════════════╗
-║       Available Commands               ║
+║       TCP-Chat Commands (v2.0)         ║
 ╠════════════════════════════════════════╣
-║ /nick <name>       - Set your username ║
-║ /join <room>       - Join a chat room  ║
-║ /rooms             - List all rooms    ║
-║ /users             - List room members ║
-║ /msg <message>     - Send to room      ║
-║ /dm <user> <msg>   - Private message   ║
-║ /status <status>   - Set your status   ║
-║ /history [n]       - Show last n msgs  ║
-║ /quit              - Exit the chat     ║
-║ /help              - Show this message ║
+║                                        ║
+║ ACCOUNT:                               ║
+║  /logout              - Sign out       ║
+║                                        ║
+║ ROOMS:                                 ║
+║  /join <room>        - Join/create     ║
+║  /rooms              - List all rooms  ║
+║                                        ║
+║ MESSAGING:                             ║
+║  /msg <text>         - Send to room    ║
+║  /dm <user> <text>   - Private message ║
+║  /history [n]        - Show messages   ║
+║                                        ║
+║ PROFILE:                               ║
+║  /nick <name>        - Change username ║
+║  /status <status>    - Set status      ║
+║  /users              - List room users ║
+║                                        ║
+║ /quit                - Exit the chat   ║
 ╚════════════════════════════════════════╝
 `
 	c.msg(helpText)
 }
 
 func (s *server) history(c *client, args []string) {
+	if !s.isAuthenticated(c) {
+		return
+	}
+
 	if c.room == nil {
 		c.msg("[ERROR] You must join a room first. Use /join ROOM_NAME")
 		return
@@ -313,4 +377,92 @@ func parseint(s string) (int, error) {
 	var result int
 	_, err := fmt.Sscanf(s, "%d", &result)
 	return result, err
+}
+
+// ============ Authentication Commands ============
+
+func (s *server) register(c *client, args []string) {
+	if len(args) < 3 {
+		c.msg("[ERROR] Usage: /register USERNAME PASSWORD")
+		return
+	}
+
+	username := args[1]
+	password := strings.Join(args[2:], " ")
+
+	err := s.auth.Register(username, password)
+	if err != nil {
+		c.msg(fmt.Sprintf("[ERROR] %v", err))
+		return
+	}
+
+	c.msg(fmt.Sprintf("✓ Account created for '%s'. Use /login to sign in.", username))
+}
+
+func (s *server) login(c *client, args []string) {
+	if c.authenticated {
+		c.msg("[ERROR] You are already logged in. Use /logout first.")
+		return
+	}
+
+	if len(args) < 3 {
+		c.msg("[ERROR] Usage: /login USERNAME PASSWORD")
+		return
+	}
+
+	username := args[1]
+	password := strings.Join(args[2:], " ")
+
+	// Attempt login
+	token, err := s.auth.Login(username, password)
+	if err != nil {
+		c.msg(fmt.Sprintf("[ERROR] %v", err))
+		return
+	}
+
+	// Update client state
+	c.authenticated = true
+	c.username = strings.ToLower(username)
+	c.sessionToken = token
+	c.nick = username // Set nick to username by default
+
+	c.msg(fmt.Sprintf("✓ Welcome back, %s! You are now authenticated.", username))
+	c.msg(fmt.Sprintf("[INFO] Session token: %s (expires in 24 hours)", token[:16]+"..."))
+}
+
+func (s *server) logout(c *client) {
+	if !c.authenticated {
+		c.msg("[ERROR] You are not logged in.")
+		return
+	}
+
+	username := c.username
+	token := c.sessionToken
+
+	// Logout
+	err := s.auth.Logout(token)
+	if err != nil {
+		c.msg(fmt.Sprintf("[ERROR] Logout failed: %v", err))
+		return
+	}
+
+	// Quit current room if in one
+	s.quitCurrentRoom(c)
+
+	// Reset client state
+	c.authenticated = false
+	c.username = ""
+	c.sessionToken = ""
+	c.nick = "anonymous"
+
+	c.msg(fmt.Sprintf("✓ You have been logged out, %s.", username))
+}
+
+// isAuthenticated checks if a client is logged in
+func (s *server) isAuthenticated(c *client) bool {
+	if !c.authenticated {
+		c.msg("[ERROR] You must be logged in to use this command. Use /login or /register.")
+		return false
+	}
+	return true
 }
