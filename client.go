@@ -8,11 +8,14 @@ import (
 )
 
 type client struct {
-	conn     net.Conn
-	nick     string
-	room     *room
-	status   string
-	commands chan<- commands
+	conn          net.Conn
+	nick          string
+	room          *room
+	status        string
+	commands      chan<- commands
+	authenticated bool
+	username      string // Registered username
+	sessionToken  string // Session token for auth
 }
 
 func (c *client) readInput() {
@@ -40,6 +43,24 @@ func (c *client) readInput() {
 		cmd := strings.ToLower(strings.TrimSpace(args[0]))
 
 		switch cmd {
+		case "/register":
+			c.commands <- commands{
+				id:     CMD_REGISTER,
+				client: c,
+				args:   args,
+			}
+		case "/login":
+			c.commands <- commands{
+				id:     CMD_LOGIN,
+				client: c,
+				args:   args,
+			}
+		case "/logout":
+			c.commands <- commands{
+				id:     CMD_LOGOUT,
+				client: c,
+				args:   args,
+			}
 		case "/nick":
 			c.commands <- commands{
 				id:     CMD_NICK,
