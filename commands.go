@@ -3,7 +3,10 @@ package main
 type commandID int
 
 const (
-	CMD_NICK commandID = iota
+	CMD_REGISTER commandID = iota
+	CMD_LOGIN
+	CMD_LOGOUT
+	CMD_NICK
 	CMD_JOIN
 	CMD_ROOMS
 	CMD_MSG
