@@ -20,10 +20,15 @@ func main() {
 
 	defer listener.Close()
 	log.Printf("server started on :8888")
-	fmt.Println("╔════════════════════════════════════════╗")
-	fmt.Println("║        TCP-Chat Server Started         ║")
-	fmt.Println("║      Listening on localhost:8888       ║")
-	fmt.Println("╚════════════════════════════════════════╝")
+	fmt.Println("╔══════════════════════════════════════════╗")
+	fmt.Println("║   TCP-Chat Server Started (v2.0 Auth)    ║")
+	fmt.Println("║   Listening on localhost:8888            ║")
+	fmt.Println("╠══════════════════════════════════════════╣")
+	fmt.Println("║   New users must register or login:      ║")
+	fmt.Println("║   /register username password           ║")
+	fmt.Println("║   /login username password              ║")
+	fmt.Println("║   Type /help for more commands           ║")
+	fmt.Println("╚══════════════════════════════════════════╝")
 
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
